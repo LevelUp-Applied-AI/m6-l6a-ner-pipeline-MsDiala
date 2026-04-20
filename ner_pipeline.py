@@ -23,7 +23,7 @@ def load_data(filepath="data/climate_articles.csv"):
         DataFrame with columns: id, text, source, language, category.
     """
     # TODO: Load the CSV and return the DataFrame
-    pass
+    return pd.read_csv(filepath)
 
 
 def preprocess_text(text):
@@ -40,7 +40,9 @@ def preprocess_text(text):
     """
     # TODO: Process text with spaCy, filter punctuation and whitespace,
     #       return lowercased lemmas
-    pass
+    nlp = spacy.load("en_core_web_sm")
+    doc = nlp(text)
+    return [token.lemma_.lower() for token in doc if not token.is_punct and not token.is_space]
 
 
 def extract_spacy_entities(texts):
@@ -55,7 +57,19 @@ def extract_spacy_entities(texts):
     """
     # TODO: Process each text with spaCy, collect entities into rows,
     #       return as a DataFrame
-    pass
+    nlp = spacy.load("en_core_web_sm")
+    rows = []
+    for text_id, text_str in texts:
+        doc = nlp(text_str)
+        for ent in doc.ents:
+            rows.append({
+                "text_id": text_id,
+                "entity_text": ent.text,
+                "entity_label": ent.label_,
+                "start_char": ent.start_char,
+                "end_char": ent.end_char
+            })
+    return pd.DataFrame(rows)
 
 
 def extract_hf_entities(texts):
@@ -73,7 +87,54 @@ def extract_hf_entities(texts):
     # TODO: Create an HF NER pipeline with dslim/bert-base-NER,
     #       process each text, reconstruct entity spans from subword
     #       tokens, return as a DataFrame
-    pass
+    ner_pipeline = hf_pipeline("ner", model="dslim/bert-base-NER")
+    rows = []
+    for text_id, text_str in texts:
+        entities = ner_pipeline(text_str)
+        
+        # Reconstruct full entity text from subword tokens
+        current_entity = None
+        for token_info in entities:
+            token = token_info["word"]
+            label = token_info["entity"]
+            score = token_info["score"]
+            start_idx = token_info["start"]
+            end_idx = token_info["end"]
+            
+            # Handle B- (beginning) and I- (inside) tags
+            if label.startswith("B-"):
+                # Save previous entity if exists
+                if current_entity:
+                    rows.append({
+                        "text_id": text_id,
+                        "entity_text": current_entity["text"],
+                        "entity_label": current_entity["label"],
+                        "start_char": current_entity["start"],
+                        "end_char": current_entity["end"]
+                    })
+                # Start new entity
+                current_entity = {
+                    "text": token.replace("##", ""),
+                    "label": label[2:],  # Remove B- prefix
+                    "start": start_idx,
+                    "end": end_idx
+                }
+            elif label.startswith("I-") and current_entity:
+                # Continue current entity
+                current_entity["text"] += token.replace("##", "")
+                current_entity["end"] = end_idx
+        
+        # Save last entity if exists
+        if current_entity:
+            rows.append({
+                "text_id": text_id,
+                "entity_text": current_entity["text"],
+                "entity_label": current_entity["label"],
+                "start_char": current_entity["start"],
+                "end_char": current_entity["end"]
+            })
+    
+    return pd.DataFrame(rows)
 
 
 def compare_ner_outputs(spacy_df, hf_df):
@@ -91,7 +152,15 @@ def compare_ner_outputs(spacy_df, hf_df):
           'total_hf': int total entities from HF
     """
     # TODO: Count entities per label for each system, compute totals
-    pass
+    spacy_counts = spacy_df["entity_label"].value_counts().to_dict()
+    hf_counts = hf_df["entity_label"].value_counts().to_dict()
+    
+    return {
+        "spacy_counts": spacy_counts,
+        "hf_counts": hf_counts,
+        "total_spacy": len(spacy_df),
+        "total_hf": len(hf_df)
+    }
 
 
 def evaluate_ner(predicted_df, gold_df):
@@ -112,7 +181,29 @@ def evaluate_ner(predicted_df, gold_df):
     """
     # TODO: Match predicted entities to gold entities by text_id +
     #       entity_text + entity_label, compute precision/recall/F1
-    pass
+    # Create sets of (text_id, entity_text, entity_label) tuples
+    predicted_set = set(
+        zip(predicted_df["text_id"], predicted_df["entity_text"], predicted_df["entity_label"])
+    )
+    gold_set = set(
+        zip(gold_df["text_id"], gold_df["entity_text"], gold_df["entity_label"])
+    )
+    
+    # Compute true positives, false positives, false negatives
+    true_positives = len(predicted_set & gold_set)
+    false_positives = len(predicted_set - gold_set)
+    false_negatives = len(gold_set - predicted_set)
+    
+    # Compute precision, recall, F1
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
+    }
 
 
 if __name__ == "__main__":

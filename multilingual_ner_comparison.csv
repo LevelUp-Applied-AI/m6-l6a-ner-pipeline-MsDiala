@@ -1,0 +1,5 @@
+Condition,Texts,Total Entities,No-Entity Rate,LOC,MISC,ORG,PER
+spaCy xx_ent_wiki_sm | English,50,233,0.0%,101,39,61,32
+spaCy xx_ent_wiki_sm | Arabic,50,50,36.0%,6,12,7,25
+XLM-RoBERTa          | English,50,233,0.0%,110,0,109,14
+XLM-RoBERTa          | Arabic,50,186,0.0%,103,0,81,2

@@ -7,21 +7,23 @@ Build and compare Named Entity Recognition (NER) pipelines using spaCy and Huggi
 ## Setup
 
 ```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-This installs spaCy and Hugging Face transformers for the first time in this course. The spaCy model download is ~12MB. The first run of the HF NER model will download ~250MB of model weights — this is a one-time download.
+The Hugging Face NER pipeline runs on PyTorch; we install the CPU wheel explicitly so the download stays small. `requirements.txt` intentionally omits `torch`. The spaCy model download is ~12 MB. The first run of the HF NER model will download ~250 MB of model weights — this is a one-time download.
 
 ## Tasks
 
-Complete the six functions in `ner_pipeline.py`:
-1. `load_data` — Load the climate articles dataset
-2. `preprocess_text` — Normalize, tokenize, and lemmatize text with spaCy
-3. `extract_spacy_entities` — Extract entities using spaCy NER
-4. `extract_hf_entities` — Extract entities using Hugging Face NER
-5. `compare_ner_outputs` — Compare entity counts between systems
-6. `evaluate_ner` — Compute entity-level precision, recall, F1
+Complete the seven functions in `ner_pipeline.py`:
+1. `load_data(filepath)` — Load the climate articles dataset
+2. `explore_data(df)` — Return a summary dict (shape, language/category counts, text length stats)
+3. `preprocess_text(text, nlp)` — NFC-normalize and return lowercased lemmas using the injected spaCy pipeline
+4. `extract_spacy_entities(df, nlp)` — Extract entities using spaCy NER
+5. `extract_hf_entities(df, ner_pipeline)` — Extract entities using Hugging Face NER (merge `##` subwords and strip `B-`/`I-` IOB prefix)
+6. `compare_ner_outputs(spacy_df, hf_df)` — Entity counts per system plus `both`/`spacy_only`/`hf_only` overlap sets
+7. `evaluate_ner(predicted_df, gold_df)` — Compute entity-level precision, recall, F1
 
 ## Submission
 

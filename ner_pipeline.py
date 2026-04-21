@@ -26,53 +26,74 @@ def load_data(filepath="data/climate_articles.csv"):
     pass
 
 
-def preprocess_text(text):
+def explore_data(df):
+    """Summarize basic corpus statistics.
+
+    Args:
+        df: DataFrame returned by load_data.
+
+    Returns:
+        Dictionary with keys:
+          'shape': tuple (n_rows, n_cols)
+          'lang_counts': dict mapping language code -> row count
+          'category_counts': dict mapping category -> row count
+          'text_length_stats': dict with 'mean', 'min', 'max' word counts
+    """
+    # TODO: Compute shape, language/category value_counts, and word-count
+    #       statistics on df['text']
+    pass
+
+
+def preprocess_text(text, nlp):
     """Preprocess a single text string for NLP analysis.
 
     Normalize Unicode, lowercase, remove punctuation, tokenize,
-    and lemmatize using spaCy.
+    and lemmatize using the injected spaCy pipeline.
 
     Args:
         text: Raw text string.
+        nlp: A loaded spaCy Language object (e.g., en_core_web_sm).
 
     Returns:
         List of cleaned, lemmatized token strings.
     """
-    # TODO: Process text with spaCy, filter punctuation and whitespace,
-    #       return lowercased lemmas
+    # TODO: NFC-normalize the text, run it through nlp(), drop
+    #       punctuation/whitespace tokens, return lowercased lemmas
     pass
 
 
-def extract_spacy_entities(texts):
-    """Extract named entities from texts using spaCy NER.
+def extract_spacy_entities(df, nlp):
+    """Extract named entities from English texts using spaCy NER.
 
     Args:
-        texts: List of (text_id, text_string) tuples.
+        df: DataFrame with columns id, text, language, ...
+        nlp: A loaded spaCy Language object.
 
     Returns:
         DataFrame with columns: text_id, entity_text, entity_label,
         start_char, end_char.
     """
-    # TODO: Process each text with spaCy, collect entities into rows,
-    #       return as a DataFrame
+    # TODO: Filter df to English rows, process each text with nlp,
+    #       collect entities into rows, return as a DataFrame
     pass
 
 
-def extract_hf_entities(texts):
-    """Extract named entities from texts using Hugging Face NER.
+def extract_hf_entities(df, ner_pipeline):
+    """Extract named entities from English texts using Hugging Face NER.
 
-    Uses the dslim/bert-base-NER model.
+    Uses the injected HF pipeline (expected: dslim/bert-base-NER).
 
     Args:
-        texts: List of (text_id, text_string) tuples.
+        df: DataFrame with columns id, text, language, ...
+        ner_pipeline: A loaded Hugging Face `pipeline('ner', ...)` object.
 
     Returns:
         DataFrame with columns: text_id, entity_text, entity_label,
         start_char, end_char.
     """
-    # TODO: Create an HF NER pipeline with dslim/bert-base-NER,
-    #       process each text, reconstruct entity spans from subword
-    #       tokens, return as a DataFrame
+    # TODO: Filter df to English rows, run each text through
+    #       ner_pipeline, merge ## subword tokens, strip B-/I- prefix
+    #       from labels (IOB format), return as a DataFrame
     pass
 
 
@@ -85,12 +106,17 @@ def compare_ner_outputs(spacy_df, hf_df):
 
     Returns:
         Dictionary with keys:
-          'spacy_counts': dict of entity_label → count for spaCy
-          'hf_counts': dict of entity_label → count for HF
+          'spacy_counts': dict of entity_label -> count for spaCy
+          'hf_counts': dict of entity_label -> count for HF
           'total_spacy': int total entities from spaCy
           'total_hf': int total entities from HF
+          'both': set of (text_id, entity_text) tuples found by both systems
+          'spacy_only': set of (text_id, entity_text) tuples found only by spaCy
+          'hf_only': set of (text_id, entity_text) tuples found only by HF
     """
-    # TODO: Count entities per label for each system, compute totals
+    # TODO: Count entities per label for each system, compute totals,
+    #       and derive the three overlap sets by matching on
+    #       (text_id, entity_text)
     pass
 
 
@@ -108,7 +134,7 @@ def evaluate_ner(predicted_df, gold_df):
                  entity_label.
 
     Returns:
-        Dictionary with keys: 'precision', 'recall', 'f1' (floats 0–1).
+        Dictionary with keys: 'precision', 'recall', 'f1' (floats 0-1).
     """
     # TODO: Match predicted entities to gold entities by text_id +
     #       entity_text + entity_label, compute precision/recall/F1
@@ -116,36 +142,43 @@ def evaluate_ner(predicted_df, gold_df):
 
 
 if __name__ == "__main__":
-    # Load data
+    # Load spaCy and HF models once, reuse across functions
+    nlp = spacy.load("en_core_web_sm")
+    hf_ner = hf_pipeline("ner", model="dslim/bert-base-NER")
+
+    # Load and explore
     df = load_data()
     if df is not None:
-        print(f"Loaded {len(df)} articles, {df['language'].value_counts().to_dict()}")
+        summary = explore_data(df)
+        if summary is not None:
+            print(f"Shape: {summary['shape']}")
+            print(f"Languages: {summary['lang_counts']}")
+            print(f"Categories: {summary['category_counts']}")
+            print(f"Text length (words): {summary['text_length_stats']}")
 
-        # Filter English texts
-        en_df = df[df["language"] == "en"]
-        texts = list(zip(en_df["id"], en_df["text"]))
-        print(f"Processing {len(texts)} English articles")
+        # Preprocess a sample to verify your function
+        sample_row = df[df["language"] == "en"].iloc[0]
+        sample_tokens = preprocess_text(sample_row["text"], nlp)
+        if sample_tokens is not None:
+            print(f"\nSample preprocessed tokens: {sample_tokens[:10]}")
 
-        # Preprocess sample
-        sample = preprocess_text(en_df["text"].iloc[0])
-        if sample is not None:
-            print(f"Sample preprocessed tokens: {sample[:10]}")
-
-        # spaCy NER
-        spacy_entities = extract_spacy_entities(texts)
+        # spaCy NER across the English corpus
+        spacy_entities = extract_spacy_entities(df, nlp)
         if spacy_entities is not None:
             print(f"\nspaCy entities: {len(spacy_entities)} total")
 
-        # HF NER
-        hf_entities = extract_hf_entities(texts)
+        # HF NER across the English corpus
+        hf_entities = extract_hf_entities(df, hf_ner)
         if hf_entities is not None:
             print(f"HF entities: {len(hf_entities)} total")
 
-        # Compare
+        # Compare the two systems
         if spacy_entities is not None and hf_entities is not None:
             comparison = compare_ner_outputs(spacy_entities, hf_entities)
             if comparison is not None:
-                print(f"\nComparison: {comparison}")
+                print(f"\nBoth systems agreed on {len(comparison['both'])} entities")
+                print(f"spaCy-only: {len(comparison['spacy_only'])}")
+                print(f"HF-only: {len(comparison['hf_only'])}")
 
         # Evaluate against gold standard
         gold = pd.read_csv("data/gold_entities.csv")
